@@ -31,6 +31,9 @@ const moveDocUpBtn = document.getElementById('move-doc-up');
 const moveDocDownBtn = document.getElementById('move-doc-down');
 const removeFromSetBtn = document.getElementById('remove-from-set');
 const editNotesetNameBtn = document.getElementById('edit-noteset-name');
+const editNotesetDocBtn = document.getElementById('edit-noteset-doc');
+const saveNotesetDocBtn = document.getElementById('save-noteset-doc');
+const cancelEditNotesetDocBtn = document.getElementById('cancel-edit-noteset-doc');
 
 // DOM Elements - Context Tab
 const contextFileInput = document.getElementById('context-file-input');
@@ -54,6 +57,7 @@ let uploadMode = 'single'; // 'single' or 'batch'
 // Note Set Viewer State
 let currentNoteSet = null;
 let currentDocIndex = 0;
+let editingNoteSetDocument = false;
 
 // Event Listeners - Upload Mode Toggle
 document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -87,6 +91,9 @@ moveDocUpBtn.addEventListener('click', () => moveDocument(-1));
 moveDocDownBtn.addEventListener('click', () => moveDocument(1));
 removeFromSetBtn.addEventListener('click', removeDocumentFromSet);
 editNotesetNameBtn.addEventListener('click', renameNoteSet);
+editNotesetDocBtn.addEventListener('click', startEditNoteSetDocument);
+saveNotesetDocBtn.addEventListener('click', saveNoteSetDocument);
+cancelEditNotesetDocBtn.addEventListener('click', cancelEditNoteSetDocument);
 
 // Event Listeners - Context
 contextFileInput.addEventListener('change', handleContextFileSelect);
@@ -449,20 +456,33 @@ function displayNoteSetDocument() {
     viewerFilename.textContent = doc.originalName;
     viewerConfidence.textContent = `Confidence: ${doc.ocrConfidence.toFixed(2)}%`;
 
-    // Update text content
-    viewerCleanedText.innerHTML = marked.parse(doc.aiCleanedText || doc.ocrText);
-    viewerRawText.textContent = doc.ocrText;
+    // Update text content based on edit mode
+    if (editingNoteSetDocument) {
+        // Show textareas for editing
+        viewerCleanedText.innerHTML = `<textarea id="edit-viewer-cleaned" class="edit-textarea" style="width: 100%; height: 400px; padding: 10px; font-family: inherit;">${escapeHtml(doc.aiCleanedText || doc.ocrText)}</textarea>`;
+        viewerRawText.innerHTML = `<textarea id="edit-viewer-raw" class="edit-textarea" style="width: 100%; height: 400px; padding: 10px; font-family: monospace;">${escapeHtml(doc.ocrText)}</textarea>`;
+    } else {
+        // Show rendered content
+        viewerCleanedText.innerHTML = marked.parse(doc.aiCleanedText || doc.ocrText);
+        viewerRawText.textContent = doc.ocrText;
+    }
 
     // Update position
     docPosition.textContent = `${currentDocIndex + 1} / ${currentNoteSet.documents.length}`;
 
     // Update navigation buttons
-    prevDocBtn.disabled = currentDocIndex === 0;
-    nextDocBtn.disabled = currentDocIndex === currentNoteSet.documents.length - 1;
+    prevDocBtn.disabled = currentDocIndex === 0 || editingNoteSetDocument;
+    nextDocBtn.disabled = currentDocIndex === currentNoteSet.documents.length - 1 || editingNoteSetDocument;
 
     // Update move buttons
-    moveDocUpBtn.disabled = currentDocIndex === 0;
-    moveDocDownBtn.disabled = currentDocIndex === currentNoteSet.documents.length - 1;
+    moveDocUpBtn.disabled = currentDocIndex === 0 || editingNoteSetDocument;
+    moveDocDownBtn.disabled = currentDocIndex === currentNoteSet.documents.length - 1 || editingNoteSetDocument;
+
+    // Update action buttons visibility
+    editNotesetDocBtn.style.display = editingNoteSetDocument ? 'none' : 'inline-block';
+    saveNotesetDocBtn.style.display = editingNoteSetDocument ? 'inline-block' : 'none';
+    cancelEditNotesetDocBtn.style.display = editingNoteSetDocument ? 'inline-block' : 'none';
+    removeFromSetBtn.disabled = editingNoteSetDocument;
 }
 
 function navigateDocument(direction) {
@@ -577,11 +597,70 @@ async function renameNoteSet() {
     }
 }
 
+function startEditNoteSetDocument() {
+    editingNoteSetDocument = true;
+    displayNoteSetDocument();
+}
+
+function cancelEditNoteSetDocument() {
+    editingNoteSetDocument = false;
+    displayNoteSetDocument();
+}
+
+async function saveNoteSetDocument() {
+    try {
+        const doc = currentNoteSet.documents[currentDocIndex].documentId;
+        const cleanedTextArea = document.getElementById('edit-viewer-cleaned');
+        const rawTextArea = document.getElementById('edit-viewer-raw');
+
+        const updateData = {};
+
+        if (rawTextArea) {
+            updateData.ocrText = rawTextArea.value;
+        }
+
+        if (cleanedTextArea) {
+            updateData.aiCleanedText = cleanedTextArea.value;
+        }
+
+        const response = await fetch(`${API_URL}/documents/${doc._id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updateData)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to save document');
+        }
+
+        // Update the document in the current note set
+        const updatedDoc = await response.json();
+        currentNoteSet.documents[currentDocIndex].documentId = updatedDoc;
+
+        editingNoteSetDocument = false;
+        displayNoteSetDocument();
+
+        // Show success message briefly
+        const originalFilename = viewerFilename.textContent;
+        viewerFilename.textContent = '✅ Saved successfully!';
+        setTimeout(() => {
+            viewerFilename.textContent = originalFilename;
+        }, 2000);
+
+    } catch (error) {
+        console.error('Save error:', error);
+        alert('Failed to save document changes');
+    }
+}
+
 function closeNoteSetViewer() {
     notesetViewer.style.display = 'none';
     document.querySelector('.notesets-section').style.display = 'block';
     currentNoteSet = null;
     currentDocIndex = 0;
+    editingNoteSetDocument = false;
     loadNoteSets();
 }
 
