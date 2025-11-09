@@ -458,9 +458,22 @@ function displayNoteSetDocument() {
 
     // Update text content based on edit mode
     if (editingNoteSetDocument) {
-        // Show textareas for editing
-        viewerCleanedText.innerHTML = `<textarea id="edit-viewer-cleaned" class="edit-textarea" style="width: 100%; height: 400px; padding: 10px; font-family: inherit;">${escapeHtml(doc.aiCleanedText || doc.ocrText)}</textarea>`;
-        viewerRawText.innerHTML = `<textarea id="edit-viewer-raw" class="edit-textarea" style="width: 100%; height: 400px; padding: 10px; font-family: monospace;">${escapeHtml(doc.ocrText)}</textarea>`;
+        // Show textareas for editing - create elements properly to avoid HTML parsing issues
+        viewerCleanedText.innerHTML = '';
+        const cleanedTextarea = document.createElement('textarea');
+        cleanedTextarea.id = 'edit-viewer-cleaned';
+        cleanedTextarea.className = 'edit-textarea';
+        cleanedTextarea.style.cssText = 'width: 100%; height: 400px; padding: 10px; font-family: inherit;';
+        cleanedTextarea.value = doc.aiCleanedText || doc.ocrText || '';
+        viewerCleanedText.appendChild(cleanedTextarea);
+
+        viewerRawText.innerHTML = '';
+        const rawTextarea = document.createElement('textarea');
+        rawTextarea.id = 'edit-viewer-raw';
+        rawTextarea.className = 'edit-textarea';
+        rawTextarea.style.cssText = 'width: 100%; height: 400px; padding: 10px; font-family: monospace;';
+        rawTextarea.value = doc.ocrText || '';
+        viewerRawText.appendChild(rawTextarea);
     } else {
         // Show rendered content
         viewerCleanedText.innerHTML = marked.parse(doc.aiCleanedText || doc.ocrText);
