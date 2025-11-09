@@ -106,15 +106,16 @@ async function getRelevantContext(ocrText, limit = 3) {
 
 // Helper function to analyze layout with Azure Document Intelligence
 async function analyzeDocumentLayout(imagePath) {
-  // Use Document Intelligence credentials if available, otherwise fall back to Vision credentials
-  // (Multi-service Azure AI Services resources can use the same key for both)
-  const azureKey = process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY || process.env.AZURE_VISION_KEY;
-  const azureEndpoint = process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || process.env.AZURE_VISION_ENDPOINT;
+  // IMPORTANT: Only use Document Intelligence if explicit credentials are provided
+  // Computer Vision keys DO NOT work with /formrecognizer/ endpoints
+  const azureKey = process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY;
+  const azureEndpoint = process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT;
 
   try {
 
     if (!azureKey || !azureEndpoint) {
-      console.log('Azure credentials not configured for Document Intelligence');
+      console.log('Document Intelligence credentials not configured (separate from Computer Vision)');
+      console.log('Skipping layout analysis - only basic OCR will be used');
       return { success: false, layoutInfo: null };
     }
 
