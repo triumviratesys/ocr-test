@@ -1003,8 +1003,8 @@ async function downloadContextDocument(id) {
         a.download = filename;
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
     } catch (error) {
         console.error('Download error:', error);
         showContextError('Failed to download file');
@@ -1032,6 +1032,13 @@ async function deleteContextDocument(id) {
         showContextError('Failed to delete context document');
     }
 }
+
+// Make context document functions globally accessible for onclick handlers
+window.editContextDocument = editContextDocument;
+window.cancelContextEdit = cancelContextEdit;
+window.saveContextEdit = saveContextEdit;
+window.downloadContextDocument = downloadContextDocument;
+window.deleteContextDocument = deleteContextDocument;
 
 // Utility functions
 function showError(message) {
