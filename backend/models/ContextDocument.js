@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const documentSchema = new mongoose.Schema({
+const contextDocumentSchema = new mongoose.Schema({
   filename: {
     type: String,
     required: true
@@ -21,25 +21,17 @@ const documentSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
-  ocrText: {
+  content: {
     type: String,
     default: ''
   },
-  ocrConfidence: {
-    type: Number,
-    default: 0
-  },
-  aiCleanedText: {
+  description: {
     type: String,
     default: ''
   },
-  aiProcessed: {
-    type: Boolean,
-    default: false
-  },
-  aiModel: {
+  category: {
     type: String,
-    default: ''
+    default: 'general'
   },
   uploadDate: {
     type: Date,
@@ -47,4 +39,4 @@ const documentSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('Document', documentSchema);
+module.exports = mongoose.model('ContextDocument', contextDocumentSchema);

@@ -3,51 +3,103 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCR File Upload</title>
+    <title>AI-Enhanced OCR System</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <header class="app-header">
-        <h1>OCR File Upload</h1>
-        <p>Upload images to extract text using Tesseract.js</p>
+        <h1>🤖 AI-Enhanced OCR System</h1>
+        <p>Azure Computer Vision + GPT-4o with RAG Context</p>
     </header>
 
+    <nav class="app-nav">
+        <button class="nav-btn active" data-tab="ocr">OCR Upload</button>
+        <button class="nav-btn" data-tab="context">Context Library</button>
+    </nav>
+
     <main class="app-main">
-        <!-- Upload Section -->
-        <section class="upload-section">
-            <h2>Upload New Image</h2>
-            <div class="upload-controls">
-                <input type="file" id="file-input" accept="image/*">
-                <button id="upload-btn" class="upload-btn">Upload & Process OCR</button>
-            </div>
-
-            <p id="selected-file" class="selected-file"></p>
-
-            <div id="error-message" class="error-message" style="display: none;"></div>
-
-            <div id="upload-result" class="upload-result" style="display: none;">
-                <h3>Upload Successful!</h3>
-                <p><strong>File:</strong> <span id="result-filename"></span></p>
-                <p><strong>Confidence:</strong> <span id="result-confidence"></span>%</p>
-                <div class="ocr-text-box">
-                    <strong>Extracted Text:</strong>
-                    <pre id="result-text"></pre>
+        <!-- OCR Tab -->
+        <div id="ocr-tab" class="tab-content active">
+            <!-- Upload Section -->
+            <section class="upload-section">
+                <h2>Upload Image for OCR</h2>
+                <div class="upload-controls">
+                    <input type="file" id="file-input" accept="image/*">
+                    <button id="upload-btn" class="upload-btn">Upload & Process</button>
                 </div>
-            </div>
 
-            <div id="loading" class="loading" style="display: none;">
-                <div class="spinner"></div>
-                <p>Processing OCR... This may take a few seconds</p>
-            </div>
-        </section>
+                <p id="selected-file" class="selected-file"></p>
 
-        <!-- Documents List -->
-        <section class="documents-section">
-            <h2>Uploaded Documents (<span id="doc-count">0</span>)</h2>
-            <div id="documents-list" class="documents-list">
-                <p class="no-documents">No documents uploaded yet</p>
-            </div>
-        </section>
+                <div id="error-message" class="error-message" style="display: none;"></div>
+
+                <div id="upload-result" class="upload-result" style="display: none;">
+                    <h3>✅ Processing Complete!</h3>
+                    <p><strong>File:</strong> <span id="result-filename"></span></p>
+                    <p><strong>OCR Confidence:</strong> <span id="result-confidence"></span>%</p>
+                    <p><strong>AI Enhanced:</strong> <span id="result-ai-status"></span></p>
+
+                    <div class="tabs-container">
+                        <div class="tabs">
+                            <button class="tab-btn active" data-text="cleaned">✨ AI-Cleaned Text</button>
+                            <button class="tab-btn" data-text="raw">📝 Raw OCR</button>
+                        </div>
+
+                        <div id="cleaned-text-panel" class="text-panel active">
+                            <div class="ocr-text-box">
+                                <div id="result-cleaned-text" class="markdown-content"></div>
+                            </div>
+                        </div>
+
+                        <div id="raw-text-panel" class="text-panel">
+                            <div class="ocr-text-box">
+                                <pre id="result-text"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="loading" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Processing OCR and AI enhancement... This may take 15-30 seconds</p>
+                </div>
+            </section>
+
+            <!-- Documents List -->
+            <section class="documents-section">
+                <h2>Processed Documents (<span id="doc-count">0</span>)</h2>
+                <div id="documents-list" class="documents-list">
+                    <p class="no-documents">No documents uploaded yet</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- Context Tab -->
+        <div id="context-tab" class="tab-content">
+            <section class="context-section">
+                <h2>📚 Context Document Library</h2>
+                <p class="section-description">Upload reference documents to improve AI text cleaning with domain-specific terminology</p>
+
+                <div class="context-upload-section">
+                    <h3>Add New Context Document</h3>
+                    <div class="upload-controls">
+                        <input type="file" id="context-file-input" accept=".txt,.md,.json,.csv,.pdf">
+                        <input type="text" id="context-description" placeholder="Description (optional)" class="text-input">
+                        <input type="text" id="context-category" placeholder="Category (e.g., medical, legal)" class="text-input">
+                        <button id="context-upload-btn" class="upload-btn">Upload Context</button>
+                    </div>
+                    <p id="context-selected-file" class="selected-file"></p>
+                    <div id="context-error-message" class="error-message" style="display: none;"></div>
+                    <div id="context-success-message" class="success-message" style="display: none;"></div>
+                </div>
+
+                <div class="context-list-section">
+                    <h3>Current Context Documents (<span id="context-count">0</span>)</h3>
+                    <div id="context-list" class="context-list">
+                        <p class="no-documents">No context documents uploaded yet</p>
+                    </div>
+                </div>
+            </section>
+        </div>
     </main>
 
     <script src="app.js"></script>
