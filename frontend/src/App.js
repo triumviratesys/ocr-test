@@ -49,11 +49,7 @@ function App() {
     setUploadResult(null);
 
     try {
-      const response = await axios.post(`${API_URL}/upload`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await axios.post(`${API_URL}/upload`, formData);
 
       setUploadResult(response.data.document);
       setSelectedFile(null);
