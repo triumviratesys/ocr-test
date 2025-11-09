@@ -887,19 +887,128 @@ function renderContextDocuments(contextDocs) {
     }
 
     contextList.innerHTML = contextDocs.map(doc => `
-        <div class="context-card">
+        <div class="context-card" data-doc-id="${doc._id}">
             <div class="context-header">
                 <h3>${escapeHtml(doc.originalName)}</h3>
-                <button class="delete-btn-small" onclick="deleteContextDocument('${doc._id}')">Delete</button>
+                <div class="context-actions">
+                    <button class="edit-btn-small" onclick="editContextDocument('${doc._id}')">Edit</button>
+                    <button class="download-btn-small" onclick="downloadContextDocument('${doc._id}')">Download</button>
+                    <button class="delete-btn-small" onclick="deleteContextDocument('${doc._id}')">Delete</button>
+                </div>
             </div>
-            <div class="context-info">
-                ${doc.description ? `<p><strong>Description:</strong> ${escapeHtml(doc.description)}</p>` : ''}
-                ${doc.category ? `<p><strong>Category:</strong> <span class="category-tag">${escapeHtml(doc.category)}</span></p>` : ''}
-                <p><strong>Uploaded:</strong> ${formatDate(doc.uploadDate)}</p>
-                <p><strong>Size:</strong> ${formatFileSize(doc.size)}</p>
+            <div class="context-info" data-edit-mode="false">
+                <div class="view-mode">
+                    ${doc.description ? `<p><strong>Description:</strong> <span class="description-text">${escapeHtml(doc.description)}</span></p>` : '<p><strong>Description:</strong> <span class="description-text"><em>No description</em></span></p>'}
+                    ${doc.category ? `<p><strong>Category:</strong> <span class="category-tag category-text">${escapeHtml(doc.category)}</span></p>` : '<p><strong>Category:</strong> <span class="category-tag category-text">general</span></p>'}
+                    <p><strong>Uploaded:</strong> ${formatDate(doc.uploadDate)}</p>
+                    <p><strong>Size:</strong> ${formatFileSize(doc.size)}</p>
+                </div>
+                <div class="edit-mode" style="display: none;">
+                    <p><strong>Description:</strong><br>
+                    <input type="text" class="edit-description text-input" value="${escapeHtml(doc.description || '')}" placeholder="Enter description"></p>
+                    <p><strong>Category:</strong><br>
+                    <input type="text" class="edit-category text-input" value="${escapeHtml(doc.category || 'general')}" placeholder="Category (e.g., medical, legal)"></p>
+                    <div class="edit-actions">
+                        <button class="btn-primary" onclick="saveContextEdit('${doc._id}')">Save</button>
+                        <button class="btn-secondary" onclick="cancelContextEdit('${doc._id}')">Cancel</button>
+                    </div>
+                </div>
             </div>
         </div>
     `).join('');
+}
+
+// Edit context document - toggle edit mode
+function editContextDocument(id) {
+    const card = document.querySelector(`.context-card[data-doc-id="${id}"]`);
+    if (!card) return;
+
+    const contextInfo = card.querySelector('.context-info');
+    const viewMode = card.querySelector('.view-mode');
+    const editMode = card.querySelector('.edit-mode');
+
+    viewMode.style.display = 'none';
+    editMode.style.display = 'block';
+    contextInfo.setAttribute('data-edit-mode', 'true');
+}
+
+// Cancel context edit
+function cancelContextEdit(id) {
+    const card = document.querySelector(`.context-card[data-doc-id="${id}"]`);
+    if (!card) return;
+
+    const contextInfo = card.querySelector('.context-info');
+    const viewMode = card.querySelector('.view-mode');
+    const editMode = card.querySelector('.edit-mode');
+
+    viewMode.style.display = 'block';
+    editMode.style.display = 'none';
+    contextInfo.setAttribute('data-edit-mode', 'false');
+}
+
+// Save context edit
+async function saveContextEdit(id) {
+    const card = document.querySelector(`.context-card[data-doc-id="${id}"]`);
+    if (!card) return;
+
+    const description = card.querySelector('.edit-description').value.trim();
+    const category = card.querySelector('.edit-category').value.trim() || 'general';
+
+    try {
+        const response = await fetch(`${API_URL}/context/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ description, category })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update context document');
+        }
+
+        // Reload documents to show updated info
+        await loadContextDocuments();
+        showContextSuccess('Context document updated successfully');
+    } catch (error) {
+        console.error('Update error:', error);
+        showContextError('Failed to update context document');
+    }
+}
+
+// Download context document
+async function downloadContextDocument(id) {
+    try {
+        const response = await fetch(`${API_URL}/context/${id}/download`);
+
+        if (!response.ok) {
+            throw new Error('Failed to download file');
+        }
+
+        // Get filename from Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'download';
+        if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+            if (filenameMatch) {
+                filename = filenameMatch[1];
+            }
+        }
+
+        // Create blob and download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    } catch (error) {
+        console.error('Download error:', error);
+        showContextError('Failed to download file');
+    }
 }
 
 // Delete context document
