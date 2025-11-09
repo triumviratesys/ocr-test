@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR File Upload</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="app-header">
+        <h1>OCR File Upload</h1>
+        <p>Upload images to extract text using Tesseract.js</p>
+    </header>
+
+    <main class="app-main">
+        <!-- Upload Section -->
+        <section class="upload-section">
+            <h2>Upload New Image</h2>
+            <div class="upload-controls">
+                <input type="file" id="file-input" accept="image/*">
+                <button id="upload-btn" class="upload-btn">Upload & Process OCR</button>
+            </div>
+
+            <p id="selected-file" class="selected-file"></p>
+
+            <div id="error-message" class="error-message" style="display: none;"></div>
+
+            <div id="upload-result" class="upload-result" style="display: none;">
+                <h3>Upload Successful!</h3>
+                <p><strong>File:</strong> <span id="result-filename"></span></p>
+                <p><strong>Confidence:</strong> <span id="result-confidence"></span>%</p>
+                <div class="ocr-text-box">
+                    <strong>Extracted Text:</strong>
+                    <pre id="result-text"></pre>
+                </div>
+            </div>
+
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Processing OCR... This may take a few seconds</p>
+            </div>
+        </section>
+
+        <!-- Documents List -->
+        <section class="documents-section">
+            <h2>Uploaded Documents (<span id="doc-count">0</span>)</h2>
+            <div id="documents-list" class="documents-list">
+                <p class="no-documents">No documents uploaded yet</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
