@@ -637,7 +637,7 @@ async function saveNoteSetDocument() {
 
         // Update the document in the current note set
         const updatedDoc = await response.json();
-        currentNoteSet.documents[currentDocIndex].documentId = updatedDoc;
+        currentNoteSet.documents[currentDocIndex].documentId = updatedDoc.document;
 
         editingNoteSetDocument = false;
         displayNoteSetDocument();

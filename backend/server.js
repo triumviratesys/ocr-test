@@ -423,7 +423,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     res.json({
       success: true,
       document: {
-        id: document._id,
+        _id: document._id,
         originalName: document.originalName,
         ocrText: document.ocrText,
         aiCleanedText: document.aiCleanedText,
@@ -601,7 +601,7 @@ app.put('/api/documents/:id', async (req, res) => {
     res.json({
       success: true,
       document: {
-        id: document._id,
+        _id: document._id,
         originalName: document.originalName,
         ocrText: document.ocrText,
         aiCleanedText: document.aiCleanedText,
