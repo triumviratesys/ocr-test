@@ -40,12 +40,36 @@ AZURE_VISION_ENDPOINT=https://your-resource.cognitiveservices.azure.com/
 - **Max file size**: 50MB
 - **Optimized for handwriting**
 
-## Alternative: Use Azure Document Intelligence
-If you want even better handwriting recognition:
-1. Search for **"Document Intelligence"** (formerly Form Recognizer)
-2. Same process as above
-3. Better for structured documents and forms
-4. Free tier: 500 pages/month
+## Document Intelligence Setup (for Layout Analysis)
+
+This application uses **Azure Document Intelligence** (formerly Form Recognizer) to extract layout information, tables, and document structure. You have two options:
+
+### Option 1: Multi-Service Resource (Recommended - Simplest)
+Use an **Azure AI Services** multi-service resource that includes both Computer Vision AND Document Intelligence:
+1. In Azure Portal, search for **"Azure AI Services"** (not "Computer Vision")
+2. Create the resource with Free F0 or Standard S0 tier
+3. Use the SAME key and endpoint for both services in your `.env`:
+   ```env
+   AZURE_VISION_KEY=your_ai_services_key
+   AZURE_VISION_ENDPOINT=https://your-ai-services-resource.cognitiveservices.azure.com/
+   ```
+4. Leave Document Intelligence variables blank - the app will automatically use Vision credentials
+
+### Option 2: Separate Document Intelligence Resource
+Create a dedicated Document Intelligence resource:
+1. Search for **"Document Intelligence"** in Azure Portal
+2. Create resource (Free tier: 500 pages/month)
+3. Get Key and Endpoint from "Keys and Endpoint"
+4. Add to `.env`:
+   ```env
+   AZURE_DOCUMENT_INTELLIGENCE_KEY=your_doc_intel_key
+   AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=https://your-doc-intel-resource.cognitiveservices.azure.com/
+   ```
+
+### How to Check Which You Have
+- **Multi-service**: Resource type shows "Azure AI Services" or "Cognitive Services" - use Option 1
+- **Computer Vision only**: Resource type shows "Computer Vision" - need Option 2 for Document Intelligence
+- **Separate resources**: You already have both - use both sets of credentials
 
 ## Can't Find Computer Vision?
 Your Azure subscription might not have it enabled. Try:

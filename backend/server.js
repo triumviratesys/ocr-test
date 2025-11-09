@@ -106,14 +106,19 @@ async function getRelevantContext(ocrText, limit = 3) {
 
 // Helper function to analyze layout with Azure Document Intelligence
 async function analyzeDocumentLayout(imagePath) {
+  // Use Document Intelligence credentials if available, otherwise fall back to Vision credentials
+  // (Multi-service Azure AI Services resources can use the same key for both)
+  const azureKey = process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY || process.env.AZURE_VISION_KEY;
+  const azureEndpoint = process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || process.env.AZURE_VISION_ENDPOINT;
+
   try {
-    const azureKey = process.env.AZURE_VISION_KEY;
-    const azureEndpoint = process.env.AZURE_VISION_ENDPOINT;
 
     if (!azureKey || !azureEndpoint) {
       console.log('Azure credentials not configured for Document Intelligence');
       return { success: false, layoutInfo: null };
     }
+
+    console.log('Using Document Intelligence endpoint:', azureEndpoint);
 
     const imageBuffer = fs.readFileSync(imagePath);
 
@@ -157,7 +162,19 @@ async function analyzeDocumentLayout(imagePath) {
       layoutInfo: result.analyzeResult
     };
   } catch (error) {
-    console.log('Document Intelligence not available, skipping layout analysis:', error.message);
+    console.error('Document Intelligence error:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      endpoint: azureEndpoint
+    });
+
+    if (error.response?.status === 401) {
+      console.error('Authentication failed - Please verify your Azure Document Intelligence credentials');
+      console.error('If using a Computer Vision resource, you may need a separate Document Intelligence resource');
+      console.error('Or use an Azure AI Services multi-service resource that includes both services');
+    }
+
     return { success: false, layoutInfo: null };
   }
 }
