@@ -14,6 +14,7 @@
 
     <nav class="app-nav">
         <button class="nav-btn active" data-tab="ocr">OCR Upload</button>
+        <button class="nav-btn" data-tab="notesets">Note Sets</button>
         <button class="nav-btn" data-tab="context">Context Library</button>
     </nav>
 
@@ -22,10 +23,24 @@
         <div id="ocr-tab" class="tab-content active">
             <!-- Upload Section -->
             <section class="upload-section">
-                <h2>Upload Image for OCR</h2>
-                <div class="upload-controls">
+                <h2>Upload Image(s) for OCR</h2>
+
+                <div class="upload-mode-toggle">
+                    <button class="mode-btn active" data-mode="single">Single File</button>
+                    <button class="mode-btn" data-mode="batch">Batch Upload</button>
+                </div>
+
+                <!-- Single Upload -->
+                <div id="single-upload" class="upload-controls">
                     <input type="file" id="file-input" accept="image/*">
                     <button id="upload-btn" class="upload-btn">Upload & Process</button>
+                </div>
+
+                <!-- Batch Upload -->
+                <div id="batch-upload" class="upload-controls" style="display: none;">
+                    <input type="file" id="batch-file-input" accept="image/*" multiple>
+                    <input type="text" id="noteset-name" placeholder="Note Set Name (optional)" class="text-input">
+                    <button id="batch-upload-btn" class="upload-btn">Upload Batch & Process</button>
                 </div>
 
                 <p id="selected-file" class="selected-file"></p>
@@ -73,6 +88,65 @@
             </section>
         </div>
 
+        <!-- Note Sets Tab -->
+        <div id="notesets-tab" class="tab-content">
+            <section class="notesets-section">
+                <h2>📚 Note Sets (<span id="noteset-count">0</span>)</h2>
+                <p class="section-description">Manage collections of documents for multi-page note sets</p>
+
+                <div id="notesets-list" class="notesets-list">
+                    <p class="no-documents">No note sets created yet</p>
+                </div>
+            </section>
+
+            <!-- Note Set Viewer (shows when a note set is selected) -->
+            <div id="noteset-viewer" class="noteset-viewer" style="display: none;">
+                <div class="viewer-header">
+                    <button id="close-viewer" class="close-btn">← Back to Note Sets</button>
+                    <h2 id="viewer-noteset-name"></h2>
+                    <button id="edit-noteset-name" class="edit-name-btn">✏️ Rename</button>
+                </div>
+
+                <div class="viewer-controls">
+                    <button id="prev-doc" class="nav-arrow-btn" disabled>◀</button>
+                    <span id="doc-position" class="doc-position">1 / 1</span>
+                    <button id="next-doc" class="nav-arrow-btn" disabled>▶</button>
+                </div>
+
+                <div id="viewer-document" class="viewer-document">
+                    <div class="document-info-bar">
+                        <span id="viewer-filename"></span>
+                        <span id="viewer-confidence"></span>
+                    </div>
+
+                    <div class="tabs-container">
+                        <div class="tabs">
+                            <button class="tab-btn active" data-text="cleaned">✨ AI-Cleaned Text</button>
+                            <button class="tab-btn" data-text="raw">📝 Raw OCR</button>
+                        </div>
+
+                        <div id="viewer-cleaned-panel" class="text-panel active">
+                            <div class="ocr-text-box scrollable">
+                                <div id="viewer-cleaned-text" class="markdown-content"></div>
+                            </div>
+                        </div>
+
+                        <div id="viewer-raw-panel" class="text-panel">
+                            <div class="ocr-text-box scrollable">
+                                <pre id="viewer-raw-text"></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="viewer-actions">
+                        <button id="move-doc-up" class="action-btn">↑ Move Up</button>
+                        <button id="move-doc-down" class="action-btn">↓ Move Down</button>
+                        <button id="remove-from-set" class="action-btn delete-btn">Remove from Set</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Context Tab -->
         <div id="context-tab" class="tab-content">
             <section class="context-section">
@@ -102,6 +176,7 @@
         </div>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

@@ -4,12 +4,33 @@ const API_URL = 'http://localhost:5000/api';
 // DOM Elements - OCR Tab
 const fileInput = document.getElementById('file-input');
 const uploadBtn = document.getElementById('upload-btn');
+const batchFileInput = document.getElementById('batch-file-input');
+const batchUploadBtn = document.getElementById('batch-upload-btn');
+const notesetNameInput = document.getElementById('noteset-name');
 const selectedFileText = document.getElementById('selected-file');
 const errorMessage = document.getElementById('error-message');
 const uploadResult = document.getElementById('upload-result');
 const loading = document.getElementById('loading');
 const documentsList = document.getElementById('documents-list');
 const docCount = document.getElementById('doc-count');
+
+// DOM Elements - Note Sets Tab
+const notesetsList = document.getElementById('notesets-list');
+const notesetCount = document.getElementById('noteset-count');
+const notesetViewer = document.getElementById('noteset-viewer');
+const viewerNotesetName = document.getElementById('viewer-noteset-name');
+const viewerFilename = document.getElementById('viewer-filename');
+const viewerConfidence = document.getElementById('viewer-confidence');
+const viewerCleanedText = document.getElementById('viewer-cleaned-text');
+const viewerRawText = document.getElementById('viewer-raw-text');
+const docPosition = document.getElementById('doc-position');
+const prevDocBtn = document.getElementById('prev-doc');
+const nextDocBtn = document.getElementById('next-doc');
+const closeViewerBtn = document.getElementById('close-viewer');
+const moveDocUpBtn = document.getElementById('move-doc-up');
+const moveDocDownBtn = document.getElementById('move-doc-down');
+const removeFromSetBtn = document.getElementById('remove-from-set');
+const editNotesetNameBtn = document.getElementById('edit-noteset-name');
 
 // DOM Elements - Context Tab
 const contextFileInput = document.getElementById('context-file-input');
@@ -24,11 +45,48 @@ const contextCount = document.getElementById('context-count');
 
 // State
 let selectedFile = null;
+let selectedBatchFiles = [];
 let selectedContextFile = null;
+let editingDocumentId = null;
+let collapsedDocuments = new Set();
+let uploadMode = 'single'; // 'single' or 'batch'
+
+// Note Set Viewer State
+let currentNoteSet = null;
+let currentDocIndex = 0;
+
+// Event Listeners - Upload Mode Toggle
+document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        uploadMode = btn.dataset.mode;
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        if (uploadMode === 'single') {
+            document.getElementById('single-upload').style.display = 'flex';
+            document.getElementById('batch-upload').style.display = 'none';
+        } else {
+            document.getElementById('single-upload').style.display = 'none';
+            document.getElementById('batch-upload').style.display = 'flex';
+        }
+        selectedFileText.textContent = '';
+    });
+});
 
 // Event Listeners - OCR
 fileInput.addEventListener('change', handleFileSelect);
 uploadBtn.addEventListener('click', handleUpload);
+batchFileInput.addEventListener('change', handleBatchFileSelect);
+batchUploadBtn.addEventListener('click', handleBatchUpload);
+
+// Event Listeners - Note Set Viewer
+closeViewerBtn.addEventListener('click', closeNoteSetViewer);
+prevDocBtn.addEventListener('click', () => navigateDocument(-1));
+nextDocBtn.addEventListener('click', () => navigateDocument(1));
+moveDocUpBtn.addEventListener('click', () => moveDocument(-1));
+moveDocDownBtn.addEventListener('click', () => moveDocument(1));
+removeFromSetBtn.addEventListener('click', removeDocumentFromSet);
+editNotesetNameBtn.addEventListener('click', renameNoteSet);
 
 // Event Listeners - Context
 contextFileInput.addEventListener('change', handleContextFileSelect);
@@ -36,10 +94,27 @@ contextUploadBtn.addEventListener('click', handleContextUpload);
 
 // Event Listeners - Navigation
 document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    btn.addEventListener('click', () => {
+        switchTab(btn.dataset.tab);
+        if (btn.dataset.tab === 'notesets') {
+            loadNoteSets();
+        }
+    });
 });
 
-// Event Listeners - Text Panels
+// Event Listeners - Text Panels (Note Set Viewer)
+document.getElementById('viewer-cleaned-panel').parentElement.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const panelName = btn.dataset.text;
+        e.currentTarget.parentElement.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        document.getElementById('viewer-cleaned-panel').classList.toggle('active', panelName === 'cleaned');
+        document.getElementById('viewer-raw-panel').classList.toggle('active', panelName === 'raw');
+    });
+});
+
+// Event Listeners - Text Panels (Upload Result)
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchTextPanel(btn.dataset.text));
 });
@@ -88,6 +163,20 @@ function handleFileSelect(event) {
     }
 }
 
+// Batch file selection handler
+function handleBatchFileSelect(event) {
+    const files = Array.from(event.target.files);
+    if (files.length > 0) {
+        selectedBatchFiles = files;
+        selectedFileText.textContent = `Selected: ${files.length} file(s) - ${files.map(f => f.name).join(', ')}`;
+        hideError();
+        hideUploadResult();
+    } else {
+        selectedBatchFiles = [];
+        selectedFileText.textContent = '';
+    }
+}
+
 // Context file selection handler
 function handleContextFileSelect(event) {
     const file = event.target.files[0];
@@ -102,7 +191,7 @@ function handleContextFileSelect(event) {
     }
 }
 
-// Upload handler
+// Upload handler (single file)
 async function handleUpload() {
     if (!selectedFile) {
         showError('Please select a file first');
@@ -112,189 +201,526 @@ async function handleUpload() {
     const formData = new FormData();
     formData.append('file', selectedFile);
 
-    uploadBtn.disabled = true;
-    uploadBtn.textContent = 'Processing...';
-    showLoading();
-    hideError();
-    hideUploadResult();
-
     try {
+        loading.style.display = 'block';
+        hideError();
+        hideUploadResult();
+
         const response = await fetch(`${API_URL}/upload`, {
             method: 'POST',
             body: formData
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Upload failed');
+            throw new Error('Upload failed');
         }
 
         const data = await response.json();
-        showUploadResult(data.document);
 
+        // Show result
+        document.getElementById('result-filename').textContent = data.document.originalName;
+        document.getElementById('result-confidence').textContent = data.document.confidence.toFixed(2);
+        document.getElementById('result-ai-status').textContent = data.document.aiProcessed ? 'Yes' : 'No';
+        document.getElementById('result-text').textContent = data.document.ocrText;
+        document.getElementById('result-cleaned-text').innerHTML = marked.parse(data.document.aiCleanedText || data.document.ocrText);
+
+        uploadResult.style.display = 'block';
+
+        // Reload documents list
+        await loadDocuments();
+
+        // Reset form
         fileInput.value = '';
         selectedFile = null;
         selectedFileText.textContent = '';
 
-        await loadDocuments();
-
     } catch (error) {
-        console.error('Upload error:', error);
-        showError(error.message || 'Failed to upload file');
+        showError('Error uploading file: ' + error.message);
     } finally {
-        uploadBtn.disabled = false;
-        uploadBtn.textContent = 'Upload & Process';
-        hideLoading();
+        loading.style.display = 'none';
     }
 }
 
-// Context upload handler
-async function handleContextUpload() {
-    if (!selectedContextFile) {
-        showContextError('Please select a file first');
+// Batch upload handler
+async function handleBatchUpload() {
+    if (selectedBatchFiles.length === 0) {
+        showError('Please select at least one file');
         return;
     }
 
     const formData = new FormData();
-    formData.append('file', selectedContextFile);
-    formData.append('description', contextDescription.value);
-    formData.append('category', contextCategory.value);
+    selectedBatchFiles.forEach(file => {
+        formData.append('files', file);
+    });
 
-    contextUploadBtn.disabled = true;
-    contextUploadBtn.textContent = 'Uploading...';
-    hideContextError();
-    hideContextSuccess();
+    const notesetName = notesetNameInput.value.trim() || `Note Set ${new Date().toLocaleDateString()}`;
+    formData.append('noteSetName', notesetName);
 
     try {
-        const response = await fetch(`${API_URL}/context`, {
+        loading.style.display = 'block';
+        hideError();
+        hideUploadResult();
+
+        const loadingText = loading.querySelector('p');
+        loadingText.textContent = `Processing batch upload of ${selectedBatchFiles.length} file(s)... This may take several minutes`;
+
+        const response = await fetch(`${API_URL}/upload-batch`, {
             method: 'POST',
             body: formData
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Upload failed');
+            throw new Error('Batch upload failed');
         }
 
         const data = await response.json();
-        showContextSuccess(`Successfully uploaded: ${data.contextDocument.originalName}`);
 
-        contextFileInput.value = '';
-        selectedContextFile = null;
-        contextSelectedFile.textContent = '';
-        contextDescription.value = '';
-        contextCategory.value = '';
+        // Show success message
+        let message = `Successfully processed ${data.processedCount} of ${selectedBatchFiles.length} file(s)`;
+        if (data.errorCount > 0) {
+            message += `\n${data.errorCount} file(s) failed`;
+        }
+        alert(message);
 
-        await loadContextDocuments();
+        // Switch to note sets tab
+        if (data.noteSet) {
+            switchTab('notesets');
+            await loadNoteSets();
+        } else {
+            await loadDocuments();
+        }
+
+        // Reset form
+        batchFileInput.value = '';
+        notesetNameInput.value = '';
+        selectedBatchFiles = [];
+        selectedFileText.textContent = '';
 
     } catch (error) {
-        console.error('Context upload error:', error);
-        showContextError(error.message || 'Failed to upload context file');
+        showError('Error uploading batch: ' + error.message);
     } finally {
-        contextUploadBtn.disabled = false;
-        contextUploadBtn.textContent = 'Upload Context';
+        loading.style.display = 'none';
+        loading.querySelector('p').textContent = 'Processing OCR and AI enhancement... This may take 15-30 seconds';
     }
 }
 
-// Load all documents
+// Load documents
 async function loadDocuments() {
     try {
         const response = await fetch(`${API_URL}/documents`);
-
-        if (!response.ok) {
-            throw new Error('Failed to fetch documents');
-        }
-
         const documents = await response.json();
         renderDocuments(documents);
         docCount.textContent = documents.length;
-
     } catch (error) {
         console.error('Error loading documents:', error);
-        documentsList.innerHTML = '<p class="no-documents">Error loading documents. Make sure the backend is running.</p>';
     }
 }
 
-// Load all context documents
-async function loadContextDocuments() {
-    try {
-        const response = await fetch(`${API_URL}/context`);
-
-        if (!response.ok) {
-            throw new Error('Failed to fetch context documents');
-        }
-
-        const contexts = await response.json();
-        renderContextDocuments(contexts);
-        contextCount.textContent = contexts.length;
-
-    } catch (error) {
-        console.error('Error loading context documents:', error);
-        contextList.innerHTML = '<p class="no-documents">Error loading context documents.</p>';
-    }
-}
-
-// Render documents list
+// Render documents
 function renderDocuments(documents) {
     if (documents.length === 0) {
         documentsList.innerHTML = '<p class="no-documents">No documents uploaded yet</p>';
         return;
     }
 
-    documentsList.innerHTML = documents.map(doc => `
-        <div class="document-card">
+    documentsList.innerHTML = documents.map(doc => {
+        const isEditing = editingDocumentId === doc._id;
+        const isCollapsed = collapsedDocuments.has(doc._id);
+
+        return `
+        <div class="document-card" data-doc-id="${doc._id}">
             <div class="document-header">
-                <h3>${escapeHtml(doc.originalName)}</h3>
-                <button class="delete-btn" onclick="deleteDocument('${doc._id}')">Delete</button>
+                <h3>
+                    <a href="${API_URL}/documents/${doc._id}/image" download="${doc.originalName}" class="filename-link">
+                        ${escapeHtml(doc.originalName)}
+                    </a>
+                </h3>
+                <div class="document-actions">
+                    ${!isEditing ? `
+                        <button class="download-btn" onclick="downloadImage('${doc._id}', '${escapeHtml(doc.originalName)}')" title="Download Image">📥 Image</button>
+                        <button class="download-btn" onclick="downloadText('${doc._id}', '${escapeHtml(doc.originalName)}')" title="Download Text">💾 Text</button>
+                        <button class="collapse-btn" onclick="toggleCollapse('${doc._id}')">
+                            ${isCollapsed ? '▶ Expand' : '▼ Collapse'}
+                        </button>
+                        <button class="edit-btn" onclick="startEditDocument('${doc._id}')">Edit</button>
+                        <button class="delete-btn" onclick="deleteDocument('${doc._id}')">Delete</button>
+                    ` : `
+                        <button class="save-btn" onclick="saveDocument('${doc._id}')">Save</button>
+                        <button class="cancel-btn" onclick="cancelEditDocument()">Cancel</button>
+                    `}
+                </div>
             </div>
             <div class="document-info">
                 <p><strong>Uploaded:</strong> ${formatDate(doc.uploadDate)}</p>
                 <p><strong>Size:</strong> ${formatFileSize(doc.size)}</p>
                 <p><strong>OCR Confidence:</strong> ${doc.ocrConfidence.toFixed(2)}%</p>
-                <p><strong>AI Enhanced:</strong> ${doc.aiProcessed ? '✅ Yes' : '❌ No'}</p>
             </div>
-            ${doc.aiProcessed && doc.aiCleanedText ? `
-                <div class="ocr-text-preview">
-                    <strong>AI-Cleaned Text (Preview):</strong>
-                    <div class="markdown-content">${renderMarkdown(doc.aiCleanedText.substring(0, 500))}${doc.aiCleanedText.length > 500 ? '...' : ''}</div>
+            ${!isCollapsed ? `
+                <div class="ocr-text-preview scrollable">
+                    ${isEditing ? `
+                        <div class="edit-section">
+                            ${doc.aiCleanedText ? `
+                                <div class="edit-field">
+                                    <strong>AI-Cleaned Text:</strong>
+                                    <textarea id="edit-cleaned-${doc._id}" class="edit-textarea">${escapeHtml(doc.aiCleanedText)}</textarea>
+                                </div>
+                            ` : ''}
+                            <div class="edit-field">
+                                <strong>Raw OCR Text:</strong>
+                                <textarea id="edit-raw-${doc._id}" class="edit-textarea">${escapeHtml(doc.ocrText)}</textarea>
+                            </div>
+                        </div>
+                    ` : `
+                        <h4>✨ AI-Cleaned Text:</h4>
+                        <div class="markdown-content">
+                            ${marked.parse(doc.aiCleanedText || doc.ocrText)}
+                        </div>
+                        <h4>📝 Raw OCR Text:</h4>
+                        <pre>${escapeHtml(doc.ocrText)}</pre>
+                    `}
                 </div>
-            ` : `
-                <div class="ocr-text-preview">
-                    <strong>Raw OCR Text (Preview):</strong>
-                    <pre>${escapeHtml((doc.ocrText || 'No text detected').substring(0, 300))}${doc.ocrText && doc.ocrText.length > 300 ? '...' : ''}</pre>
+            ` : ''}
+        </div>
+        `;
+    }).join('');
+}
+
+// Note Sets Functions
+
+async function loadNoteSets() {
+    try {
+        const response = await fetch(`${API_URL}/notesets`);
+        const noteSets = await response.json();
+        renderNoteSets(noteSets);
+        notesetCount.textContent = noteSets.length;
+    } catch (error) {
+        console.error('Error loading note sets:', error);
+    }
+}
+
+function renderNoteSets(noteSets) {
+    if (noteSets.length === 0) {
+        notesetsList.innerHTML = '<p class="no-documents">No note sets created yet</p>';
+        return;
+    }
+
+    notesetsList.innerHTML = noteSets.map(set => `
+        <div class="noteset-card" data-set-id="${set._id}">
+            <div class="noteset-header">
+                <h3>${escapeHtml(set.name)}</h3>
+                <div class="noteset-info">
+                    <span>${set.documents.length} document(s)</span>
+                    <span>Updated: ${formatDate(set.updatedDate)}</span>
                 </div>
-            `}
+            </div>
+            <div class="noteset-actions">
+                <button class="view-btn" onclick="viewNoteSet('${set._id}')">View</button>
+                <button class="delete-btn" onclick="deleteNoteSet('${set._id}')">Delete</button>
+            </div>
         </div>
     `).join('');
 }
 
-// Render context documents list
-function renderContextDocuments(contexts) {
-    if (contexts.length === 0) {
-        contextList.innerHTML = '<p class="no-documents">No context documents uploaded yet</p>';
-        return;
-    }
+async function viewNoteSet(noteSetId) {
+    try {
+        const response = await fetch(`${API_URL}/notesets/${noteSetId}`);
+        currentNoteSet = await response.json();
+        currentDocIndex = 0;
 
-    contextList.innerHTML = contexts.map(ctx => `
-        <div class="context-card">
-            <div class="context-header">
-                <div>
-                    <h3>${escapeHtml(ctx.originalName)}</h3>
-                    ${ctx.category ? `<span class="context-category">${escapeHtml(ctx.category)}</span>` : ''}
-                </div>
-                <button class="delete-btn" onclick="deleteContext('${ctx._id}')">Delete</button>
-            </div>
-            <div class="context-info">
-                <p><strong>Uploaded:</strong> ${formatDate(ctx.uploadDate)}</p>
-                <p><strong>Size:</strong> ${formatFileSize(ctx.size)}</p>
-                ${ctx.description ? `<p><strong>Description:</strong> ${escapeHtml(ctx.description)}</p>` : ''}
-            </div>
-            <div class="context-preview">
-                <strong>Content Preview:</strong>
-                <pre>${escapeHtml((ctx.content || '').substring(0, 200))}${ctx.content && ctx.content.length > 200 ? '...' : ''}</pre>
-            </div>
-        </div>
-    `).join('');
+        // Hide note sets list, show viewer
+        document.querySelector('.notesets-section').style.display = 'none';
+        notesetViewer.style.display = 'block';
+
+        // Display note set
+        displayNoteSetDocument();
+    } catch (error) {
+        console.error('Error loading note set:', error);
+        alert('Error loading note set');
+    }
+}
+
+function displayNoteSetDocument() {
+    if (!currentNoteSet || currentNoteSet.documents.length === 0) return;
+
+    const doc = currentNoteSet.documents[currentDocIndex].documentId;
+
+    // Update header
+    viewerNotesetName.textContent = currentNoteSet.name;
+    viewerFilename.textContent = doc.originalName;
+    viewerConfidence.textContent = `Confidence: ${doc.ocrConfidence.toFixed(2)}%`;
+
+    // Update text content
+    viewerCleanedText.innerHTML = marked.parse(doc.aiCleanedText || doc.ocrText);
+    viewerRawText.textContent = doc.ocrText;
+
+    // Update position
+    docPosition.textContent = `${currentDocIndex + 1} / ${currentNoteSet.documents.length}`;
+
+    // Update navigation buttons
+    prevDocBtn.disabled = currentDocIndex === 0;
+    nextDocBtn.disabled = currentDocIndex === currentNoteSet.documents.length - 1;
+
+    // Update move buttons
+    moveDocUpBtn.disabled = currentDocIndex === 0;
+    moveDocDownBtn.disabled = currentDocIndex === currentNoteSet.documents.length - 1;
+}
+
+function navigateDocument(direction) {
+    const newIndex = currentDocIndex + direction;
+    if (newIndex >= 0 && newIndex < currentNoteSet.documents.length) {
+        currentDocIndex = newIndex;
+        displayNoteSetDocument();
+    }
+}
+
+async function moveDocument(direction) {
+    if (!currentNoteSet) return;
+
+    const newIndex = currentDocIndex + direction;
+    if (newIndex < 0 || newIndex >= currentNoteSet.documents.length) return;
+
+    try {
+        // Swap documents
+        const docs = currentNoteSet.documents;
+        const temp = docs[currentDocIndex];
+        docs[currentDocIndex] = docs[newIndex];
+        docs[newIndex] = temp;
+
+        // Update orders
+        docs.forEach((doc, idx) => {
+            doc.order = idx;
+        });
+
+        // Send update to server
+        const response = await fetch(`${API_URL}/notesets/${currentNoteSet._id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                documents: docs.map(d => ({
+                    documentId: d.documentId._id,
+                    order: d.order
+                }))
+            })
+        });
+
+        if (!response.ok) throw new Error('Failed to reorder documents');
+
+        // Update current index and refresh
+        currentDocIndex = newIndex;
+        const data = await response.json();
+        currentNoteSet = data.noteSet;
+        displayNoteSetDocument();
+
+    } catch (error) {
+        console.error('Error moving document:', error);
+        alert('Error reordering document');
+    }
+}
+
+async function removeDocumentFromSet() {
+    if (!currentNoteSet || currentNoteSet.documents.length === 0) return;
+
+    if (!confirm('Remove this document from the note set?')) return;
+
+    try {
+        const docId = currentNoteSet.documents[currentDocIndex].documentId._id;
+
+        const response = await fetch(`${API_URL}/notesets/${currentNoteSet._id}/documents/${docId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to remove document');
+
+        const data = await response.json();
+        currentNoteSet = data.noteSet;
+
+        // If no documents left, close viewer
+        if (currentNoteSet.documents.length === 0) {
+            closeNoteSetViewer();
+            loadNoteSets();
+        } else {
+            // Adjust current index if needed
+            if (currentDocIndex >= currentNoteSet.documents.length) {
+                currentDocIndex = currentNoteSet.documents.length - 1;
+            }
+            displayNoteSetDocument();
+        }
+
+    } catch (error) {
+        console.error('Error removing document:', error);
+        alert('Error removing document from set');
+    }
+}
+
+async function renameNoteSet() {
+    if (!currentNoteSet) return;
+
+    const newName = prompt('Enter new name:', currentNoteSet.name);
+    if (!newName || newName === currentNoteSet.name) return;
+
+    try {
+        const response = await fetch(`${API_URL}/notesets/${currentNoteSet._id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName })
+        });
+
+        if (!response.ok) throw new Error('Failed to rename note set');
+
+        const data = await response.json();
+        currentNoteSet = data.noteSet;
+        viewerNotesetName.textContent = currentNoteSet.name;
+
+    } catch (error) {
+        console.error('Error renaming note set:', error);
+        alert('Error renaming note set');
+    }
+}
+
+function closeNoteSetViewer() {
+    notesetViewer.style.display = 'none';
+    document.querySelector('.notesets-section').style.display = 'block';
+    currentNoteSet = null;
+    currentDocIndex = 0;
+    loadNoteSets();
+}
+
+async function deleteNoteSet(setId) {
+    if (!confirm('Delete this note set? (Documents will not be deleted)')) return;
+
+    try {
+        const response = await fetch(`${API_URL}/notesets/${setId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete note set');
+
+        await loadNoteSets();
+    } catch (error) {
+        console.error('Error deleting note set:', error);
+        alert('Error deleting note set');
+    }
+}
+
+// Start editing a document
+function startEditDocument(id) {
+    editingDocumentId = id;
+    loadDocuments();
+}
+
+// Cancel editing a document
+function cancelEditDocument() {
+    editingDocumentId = null;
+    loadDocuments();
+}
+
+// Save edited document
+async function saveDocument(id) {
+    try {
+        const cleanedTextArea = document.getElementById(`edit-cleaned-${id}`);
+        const rawTextArea = document.getElementById(`edit-raw-${id}`);
+
+        const updateData = {};
+
+        if (rawTextArea) {
+            updateData.ocrText = rawTextArea.value;
+        }
+
+        if (cleanedTextArea) {
+            updateData.aiCleanedText = cleanedTextArea.value;
+        }
+
+        const response = await fetch(`${API_URL}/documents/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updateData)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to save document');
+        }
+
+        editingDocumentId = null;
+        await loadDocuments();
+
+        // Show success message briefly
+        const card = document.querySelector(`[data-doc-id="${id}"]`);
+        if (card) {
+            const header = card.querySelector('.document-header h3');
+            const originalText = header.textContent;
+            header.textContent = '✅ Saved successfully!';
+            setTimeout(() => {
+                header.textContent = originalText;
+            }, 2000);
+        }
+
+    } catch (error) {
+        console.error('Save error:', error);
+        showError('Failed to save document changes');
+    }
+}
+
+function toggleCollapse(id) {
+    if (collapsedDocuments.has(id)) {
+        collapsedDocuments.delete(id);
+    } else {
+        collapsedDocuments.add(id);
+    }
+    loadDocuments();
+}
+
+// Download image
+async function downloadImage(id, filename) {
+    try {
+        const response = await fetch(`${API_URL}/documents/${id}/image`);
+        if (!response.ok) throw new Error('Failed to download image');
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error('Download image error:', error);
+        showError('Failed to download image');
+    }
+}
+
+// Download text
+async function downloadText(id, originalFilename) {
+    try {
+        const response = await fetch(`${API_URL}/documents/${id}`);
+        if (!response.ok) throw new Error('Failed to fetch document');
+
+        const doc = await response.json();
+
+        // Prefer AI-cleaned text if available, otherwise use raw OCR text
+        const textContent = doc.aiCleanedText || doc.ocrText || '';
+
+        // Create filename with .txt extension
+        const baseFilename = originalFilename.replace(/\.[^/.]+$/, '');
+        const filename = `${baseFilename}.txt`;
+
+        // Create and download text file
+        const blob = new Blob([textContent], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error('Download text error:', error);
+        showError('Failed to download text');
+    }
 }
 
 // Delete document
@@ -313,21 +739,93 @@ async function deleteDocument(id) {
         }
 
         await loadDocuments();
-
-        const resultElement = document.getElementById('result-filename');
-        if (uploadResult.style.display !== 'none' && resultElement) {
-            hideUploadResult();
-        }
-
     } catch (error) {
         console.error('Delete error:', error);
         showError('Failed to delete document');
     }
 }
 
+// Context upload handler
+async function handleContextUpload() {
+    if (!selectedContextFile) {
+        showContextError('Please select a file first');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', selectedContextFile);
+    formData.append('description', contextDescription.value);
+    formData.append('category', contextCategory.value);
+
+    try {
+        const response = await fetch(`${API_URL}/context`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error('Upload failed');
+        }
+
+        showContextSuccess('Context document uploaded successfully!');
+
+        // Reload context documents list
+        await loadContextDocuments();
+
+        // Reset form
+        contextFileInput.value = '';
+        contextDescription.value = '';
+        contextCategory.value = '';
+        selectedContextFile = null;
+        contextSelectedFile.textContent = '';
+
+        setTimeout(() => {
+            hideContextSuccess();
+        }, 3000);
+
+    } catch (error) {
+        showContextError('Error uploading context document: ' + error.message);
+    }
+}
+
+// Load context documents
+async function loadContextDocuments() {
+    try {
+        const response = await fetch(`${API_URL}/context`);
+        const contextDocs = await response.json();
+        renderContextDocuments(contextDocs);
+        contextCount.textContent = contextDocs.length;
+    } catch (error) {
+        console.error('Error loading context documents:', error);
+    }
+}
+
+// Render context documents
+function renderContextDocuments(contextDocs) {
+    if (contextDocs.length === 0) {
+        contextList.innerHTML = '<p class="no-documents">No context documents uploaded yet</p>';
+        return;
+    }
+
+    contextList.innerHTML = contextDocs.map(doc => `
+        <div class="context-card">
+            <div class="context-header">
+                <h3>${escapeHtml(doc.originalName)}</h3>
+                <button class="delete-btn-small" onclick="deleteContextDocument('${doc._id}')">Delete</button>
+            </div>
+            <div class="context-info">
+                ${doc.description ? `<p><strong>Description:</strong> ${escapeHtml(doc.description)}</p>` : ''}
+                ${doc.category ? `<p><strong>Category:</strong> <span class="category-tag">${escapeHtml(doc.category)}</span></p>` : ''}
+                <p><strong>Uploaded:</strong> ${formatDate(doc.uploadDate)}</p>
+                <p><strong>Size:</strong> ${formatFileSize(doc.size)}</p>
+            </div>
+        </div>
+    `).join('');
+}
+
 // Delete context document
-async function deleteContext(id) {
-    if (!confirm('Are you sure you want to delete this context document?')) {
+async function deleteContextDocument(id) {
+    if (!confirm('Delete this context document?')) {
         return;
     }
 
@@ -341,132 +839,68 @@ async function deleteContext(id) {
         }
 
         await loadContextDocuments();
-        showContextSuccess('Context document deleted successfully');
-
     } catch (error) {
-        console.error('Delete context error:', error);
+        console.error('Delete error:', error);
         showContextError('Failed to delete context document');
     }
 }
 
-// Show upload result
-function showUploadResult(doc) {
-    document.getElementById('result-filename').textContent = doc.originalName;
-    document.getElementById('result-confidence').textContent = doc.confidence.toFixed(2);
-    document.getElementById('result-ai-status').textContent = doc.aiProcessed ? '✅ Yes' : '❌ No';
-
-    // Show AI-cleaned text
-    const cleanedTextDiv = document.getElementById('result-cleaned-text');
-    if (doc.aiCleanedText) {
-        cleanedTextDiv.innerHTML = renderMarkdown(doc.aiCleanedText);
-    } else {
-        cleanedTextDiv.textContent = 'AI processing was not available';
-    }
-
-    // Show raw OCR text
-    document.getElementById('result-text').textContent = doc.ocrText || 'No text detected';
-
-    uploadResult.style.display = 'block';
-}
-
-// Simple markdown renderer
-function renderMarkdown(text) {
-    if (!text) return '';
-
-    return text
-        // Headers
-        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-        // Bold
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        // Line breaks
-        .replace(/\n/g, '<br>')
-        // Lists
-        .replace(/^- (.*$)/gim, '<li>$1</li>')
-        .replace(/^(\d+)\. (.*$)/gim, '<li>$2</li>')
-        .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-}
-
-// Hide upload result
-function hideUploadResult() {
-    uploadResult.style.display = 'none';
-}
-
-// Show loading spinner
-function showLoading() {
-    loading.style.display = 'block';
-}
-
-// Hide loading spinner
-function hideLoading() {
-    loading.style.display = 'none';
-}
-
-// Show error message
+// Utility functions
 function showError(message) {
     errorMessage.textContent = message;
     errorMessage.style.display = 'block';
 }
 
-// Hide error message
 function hideError() {
     errorMessage.style.display = 'none';
 }
 
-// Show context error
+function hideUploadResult() {
+    uploadResult.style.display = 'none';
+}
+
 function showContextError(message) {
     contextErrorMessage.textContent = message;
     contextErrorMessage.style.display = 'block';
 }
 
-// Hide context error
 function hideContextError() {
     contextErrorMessage.style.display = 'none';
 }
 
-// Show context success
 function showContextSuccess(message) {
     contextSuccessMessage.textContent = message;
     contextSuccessMessage.style.display = 'block';
-    setTimeout(() => hideContextSuccess(), 5000);
 }
 
-// Hide context success
 function hideContextSuccess() {
     contextSuccessMessage.style.display = 'none';
 }
 
-// Utility: Format date
 function formatDate(dateString) {
     const date = new Date(dateString);
     return date.toLocaleString();
 }
 
-// Utility: Format file size
 function formatFileSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
 }
 
-// Utility: Escape HTML to prevent XSS
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-// Check backend health on page load
 async function checkBackendHealth() {
     try {
-        const response = await fetch(`${API_URL}/health`);
+        const response = await fetch(`${API_URL}/documents`);
         if (!response.ok) {
-            throw new Error('Backend not responding');
+            console.warn('Backend may not be running');
         }
-        console.log('Backend is healthy');
     } catch (error) {
-        console.error('Backend health check failed:', error);
-        showError('Cannot connect to backend. Make sure the server is running on port 5000.');
+        console.error('Cannot connect to backend:', error);
     }
 }
