@@ -119,6 +119,14 @@ async function analyzeDocumentLayout(imagePath) {
     }
 
     console.log('Using Document Intelligence endpoint:', azureEndpoint);
+    console.log('Using API key:', azureKey ? `${azureKey.substring(0, 8)}...` : 'NONE');
+
+    // Log which credentials are being used
+    if (process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY) {
+      console.log('Using dedicated Document Intelligence credentials');
+    } else {
+      console.log('Using Azure Vision credentials (fallback for multi-service resource)');
+    }
 
     const imageBuffer = fs.readFileSync(imagePath);
 
@@ -162,19 +170,44 @@ async function analyzeDocumentLayout(imagePath) {
       layoutInfo: result.analyzeResult
     };
   } catch (error) {
-    console.error('Document Intelligence error:', {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      endpoint: azureEndpoint
-    });
+    console.error('\n=== Document Intelligence Error ===');
+    console.error('Message:', error.message);
+    console.error('Endpoint:', azureEndpoint);
 
-    if (error.response?.status === 401) {
-      console.error('Authentication failed - Please verify your Azure Document Intelligence credentials');
-      console.error('If using a Computer Vision resource, you may need a separate Document Intelligence resource');
-      console.error('Or use an Azure AI Services multi-service resource that includes both services');
+    if (error.response) {
+      console.error('Status:', error.response.status, error.response.statusText);
+
+      if (error.response.status === 401) {
+        console.error('\n🔴 401 UNAUTHORIZED - Authentication Failed');
+        console.error('\nPossible causes:');
+        console.error('  1. Invalid API key - The key may be incorrect or expired');
+        console.error('  2. Wrong endpoint - The endpoint may not match the API key');
+        console.error('  3. Computer Vision key used for Document Intelligence endpoint');
+        console.error('     (Computer Vision resources don\'t support /formrecognizer endpoints)');
+        console.error('\nTo fix this:');
+        console.error('  Option A: Use Azure AI Services multi-service resource');
+        console.error('    • Go to Azure Portal → Create "Azure AI Services" resource');
+        console.error('    • Use its key/endpoint for AZURE_VISION_KEY/AZURE_VISION_ENDPOINT');
+        console.error('    • Leave AZURE_DOCUMENT_INTELLIGENCE_* blank');
+        console.error('\n  Option B: Create separate Document Intelligence resource');
+        console.error('    • Go to Azure Portal → Create "Document Intelligence" resource');
+        console.error('    • Set AZURE_DOCUMENT_INTELLIGENCE_KEY and AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT');
+        console.error('\n  Run test script: node test-document-intelligence.js');
+      } else if (error.response.status === 404) {
+        console.error('\n🔴 404 NOT FOUND - Endpoint doesn\'t support Document Intelligence');
+        console.error('\nThis confirms you have a Computer Vision resource, not Azure AI Services.');
+        console.error('You need to create a separate Document Intelligence resource.');
+      }
+
+      // Log response data if available for debugging
+      if (error.response.data) {
+        console.error('\nAzure response:', JSON.stringify(error.response.data, null, 2));
+      }
+    } else {
+      console.error('No response from server - check network and endpoint URL');
     }
 
+    console.error('===================================\n');
     return { success: false, layoutInfo: null };
   }
 }
