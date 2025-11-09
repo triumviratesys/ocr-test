@@ -917,6 +917,64 @@ app.get('/api/context', async (req, res) => {
   }
 });
 
+// Update context document (category and description)
+app.put('/api/context/:id', async (req, res) => {
+  try {
+    const { category, description } = req.body;
+
+    const contextDoc = await ContextDocument.findById(req.params.id);
+    if (!contextDoc) {
+      return res.status(404).json({ error: 'Context document not found' });
+    }
+
+    // Update fields if provided
+    if (category !== undefined) {
+      contextDoc.category = category;
+    }
+    if (description !== undefined) {
+      contextDoc.description = description;
+    }
+
+    await contextDoc.save();
+
+    res.json({
+      success: true,
+      contextDocument: {
+        id: contextDoc._id,
+        originalName: contextDoc.originalName,
+        description: contextDoc.description,
+        category: contextDoc.category,
+        uploadDate: contextDoc.uploadDate
+      }
+    });
+  } catch (error) {
+    console.error('Error updating context document:', error);
+    res.status(500).json({ error: 'Error updating context document' });
+  }
+});
+
+// Download context document file
+app.get('/api/context/:id/download', async (req, res) => {
+  try {
+    const contextDoc = await ContextDocument.findById(req.params.id);
+    if (!contextDoc) {
+      return res.status(404).json({ error: 'Context document not found' });
+    }
+
+    if (!fs.existsSync(contextDoc.filePath)) {
+      return res.status(404).json({ error: 'File not found on disk' });
+    }
+
+    // Set proper headers for download
+    res.setHeader('Content-Disposition', `attachment; filename="${contextDoc.originalName}"`);
+    res.setHeader('Content-Type', contextDoc.mimeType);
+    res.sendFile(path.resolve(contextDoc.filePath));
+  } catch (error) {
+    console.error('Error downloading context document:', error);
+    res.status(500).json({ error: 'Error downloading file' });
+  }
+});
+
 // Delete context document
 app.delete('/api/context/:id', async (req, res) => {
   try {
